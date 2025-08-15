@@ -17,16 +17,12 @@
  */
 
 const ExcelJS = require('exceljs');
-const yargs = require('yargs/yargs');
-const { hideBin } = require('yargs/helpers');
-
-const argv = yargs(hideBin(process.argv))
-  .option('file',      { alias: 'f', type: 'string', demandOption: true, describe: 'Path to EXISTING .xlsx' })
-  .option('last',      { type: 'number', default: 6, describe: 'If Window is empty, take last N sprints from Data' })
-  .option('window',    { type: 'string', describe: 'Comma-separated sprint IDs to use instead of Window' })
-  .option('threshold', { type: 'number', default: 0.90, describe: 'Predictability threshold (0..1) for Sprint Health' })
-  .option('fixNumbers',{ type: 'boolean', default: true, describe: 'Coerce Data!G/H values to numeric' })
-  .help().argv;
+// replace yargs lines with:
+const argv = require('minimist')(process.argv.slice(2), {
+  string: ['file', 'window'],
+  boolean: ['fixNumbers'],
+  default: { last: 6, threshold: 0.90, fixNumbers: true }
+});
 
 // ------- helpers -------
 const NBSP = /\u00A0/g;
@@ -323,32 +319,31 @@ const sampleVar = arr => { const sd = sampleStdDev(arr); return sd*sd; };
   };
 
   // NOT GOOD items
-  wsR.addRow([]);
-  wsR.addRow(['Not Good Items (contributing)']);
-  wsR.addRow(['Sprint','Item ID','Outcome','State','CommittedPts','StoryPoints','Reason','Contribution % (of sprint committed)']);
   const notGoodItems = dataRows
-    .filter(d => lowSet.has(d.Sprint))
-    .map(makeItemRecord)
-    .filter(Boolean);
-  const ngStart = wsR.lastRow.number + 1;
-  wsR.addRows(notGoodItems);
-  for (let r = ngStart; r < ngStart + notGoodItems.length; r++) {
-    wsR.getCell(`H${r}`).numFmt = '0.00%';
-  }
+  .filter(d => lowSet.has(d.Sprint))
+  .map(makeItemRecord)
+  .filter(Boolean)
+  .map(x => [x.Sprint, x.ItemID, x.Outcome, x.State, x.CommittedPts, x.StoryPoints, x.Reason, x.ContributionPct]);
+
+const ngStart = wsR.lastRow.number + 1;
+wsR.addRows(notGoodItems);
+for (let r = ngStart; r < ngStart + notGoodItems.length; r++) {
+  wsR.getCell(`H${r}`).numFmt = '0.00%';
+}
+  
 
   // GOOD items (for context; same rules, but sprint is >= threshold)
-  wsR.addRow([]);
-  wsR.addRow(['Good Items (for context)']);
-  wsR.addRow(['Sprint','Item ID','Outcome','State','CommittedPts','StoryPoints','Reason','Contribution % (of sprint committed)']);
-  const goodItems = dataRows
-    .filter(d => goodSet.has(d.Sprint))
-    .map(makeItemRecord)
-    .filter(Boolean);
-  const gdStart = wsR.lastRow.number + 1;
-  wsR.addRows(goodItems);
-  for (let r = gdStart; r < gdStart + goodItems.length; r++) {
-    wsR.getCell(`H${r}`).numFmt = '0.00%';
-  }
+const goodItems = dataRows
+  .filter(d => goodSet.has(d.Sprint))
+  .map(makeItemRecord)
+  .filter(Boolean)
+  .map(x => [x.Sprint, x.ItemID, x.Outcome, x.State, x.CommittedPts, x.StoryPoints, x.Reason, x.ContributionPct]);
+
+const gdStart = wsR.lastRow.number + 1;
+wsR.addRows(goodItems);
+for (let r = gdStart; r < gdStart + goodItems.length; r++) {
+  wsR.getCell(`H${r}`).numFmt = '0.00%';
+}
 
   await wb.xlsx.writeFile(argv.file);
   console.log(`✅ Updated workbook in place: ${argv.file}`);
